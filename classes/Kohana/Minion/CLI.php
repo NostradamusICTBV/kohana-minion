@@ -1,19 +1,17 @@
 <?php
-/**
-* Minion helper class, interact with the command line by accepting input options.
-*
-* @package   Kohana/Minion
-* @category  Helper
-* @author    Kohana Team
-* @copyright (c) 2009-2014 Kohana Team
-* @license   http://kohanaframework.org/license
-*/
-abstract class Kohana_Minion_CLI {
 
-	/**
-	 * @var array colour designations of the text
-	 */
-	protected static $_foreground_colors = array(
+/**
+ * @package    Kohana/Minion
+ * @author     Kohana Team
+ * @copyright  (c) 2015 Kohana Team
+ * @copyright  (c) 2016-2018 Koseven Team
+ * @license    https://koseven.ga/LICENSE.md
+ */
+class Kohana_Minion_CLI {
+
+	public static $wait_msg = 'Press any key to continue...';
+
+	protected static $foreground_colors = [
 		'black'        => '0;30',
 		'dark_gray'    => '1;30',
 		'blue'         => '0;34',
@@ -30,12 +28,8 @@ abstract class Kohana_Minion_CLI {
 		'yellow'       => '1;33',
 		'light_gray'   => '0;37',
 		'white'        => '1;37',
-	);
-
-	/**
-	* @var array colour designations of the background
-	*/
-	protected static $_background_colors = array(
+	];
+	protected static $background_colors = [
 		'black'      => '40',
 		'red'        => '41',
 		'green'      => '42',
@@ -44,19 +38,19 @@ abstract class Kohana_Minion_CLI {
 		'magenta'    => '45',
 		'cyan'       => '46',
 		'light_gray' => '47',
-	);
+	];
 
 	/**
-	 * Returns one or more command-line options. 
-	 * Options are specified using standard CLI syntax:
+	 * Returns one or more command-line options. Options are specified using
+	 * standard CLI syntax:
 	 *
 	 *     php index.php --username=john.smith --password=secret --var="some value with spaces"
 	 *
-	 *     // Get the values of 'username' and 'password'
+	 *     // Get the values of "username" and "password"
 	 *     $auth = Minion_CLI::options('username', 'password');
 	 *
-	 * @param   string  $options, ...  option name
-	 * @return  mixed
+	 * @param   string  $options,...    option name
+	 * @return  array
 	 */
 	public static function options($options = NULL)
 	{
@@ -64,10 +58,10 @@ abstract class Kohana_Minion_CLI {
 		$options = func_get_args();
 
 		// Found option values
-		$values = array();
+		$values = [];
 
 		// Skip the first option, it is always the file executed
-		for ($i = 1; $i < $_SERVER['argc']; $i++)
+		for ($i = 1; $i < $_SERVER['argc']; ++$i)
 		{
 			if ( ! isset($_SERVER['argv'][$i]))
 			{
@@ -85,7 +79,7 @@ abstract class Kohana_Minion_CLI {
 				continue;
 			}
 
-			// Remove the '--' prefix
+			// Remove the "--" prefix
 			$opt = substr($opt, 2);
 
 			if (strpos($opt, '='))
@@ -117,15 +111,18 @@ abstract class Kohana_Minion_CLI {
 	}
 
 	/**
-	 * Reads input from the user. 
-	 * This can have either 1 or 2 arguments.
+	 * Reads input from the user. This can have either 1 or 2 arguments.
 	 *
-	 *     // Waits for any key press
-	 *     if (Minion_CLI::read())
-	 *     // Takes any input
-	 *     $color = Minion_CLI::read('What is your favorite color?');
-	 *     // Will only accept the options in the array
-	 *     $ready = Minion_CLI::read('Are you ready?', array('y','n'));
+	 * Usage:
+	 *
+	 * // Waits for any key press
+	 * Minion_CLI::read();
+	 *
+	 * // Takes any input
+	 * $color = Minion_CLI::read('What is your favorite color?');
+	 *
+	 * // Will only accept the options in the array
+	 * $ready = Minion_CLI::read('Are you ready?', array('y','n'));
 	 *
 	 * @param  string  $text    text to show user before waiting for input
 	 * @param  array   $options array of options the user is shown
@@ -146,9 +143,9 @@ abstract class Kohana_Minion_CLI {
 		$input = trim(fgets(STDIN));
 
 		// If options are provided and the choice is not in the array, tell them to try again
-		if ( ! empty($options) AND ! in_array($input, $options))
+		if ( ! empty($options) && ! in_array($input, $options))
 		{
-			Minion_CLI::write(I18n::translate('Invalid option value. Please try again.'));
+			Minion_CLI::write('This is not a valid option. Please try again.');
 
 			$input = Minion_CLI::read($text, $options);
 		}
@@ -158,26 +155,66 @@ abstract class Kohana_Minion_CLI {
 	}
 
 	/**
-	 * Outputs a string to the CLI. 
-	 * If you send an array it will implode them with a line break.
+	 * Experimental feature.
 	 *
-	 *     Minion_CLI::write($string);
-	 *     
-	 * @param  string|array $text the text to output or array of lines
-	 * @return void
+	 * Reads hidden input from the user
+	 *
+	 * Usage:
+	 *
+	 * $password = Minion_CLI::password('Enter your password');
+	 *
+	 * @author Mathew Davies.
+	 * @return string
+	 */
+	public static function password($text = '')
+	{
+		$text .= ': ';
+
+		if (Kohana::$is_windows)
+		{
+			$vbscript = sys_get_temp_dir().'Minion_CLI_Password.vbs';
+
+			// Create temporary file
+			file_put_contents($vbscript, 'wscript.echo(InputBox("'.addslashes($text).'"))');
+
+			$password = shell_exec('cscript //nologo '.escapeshellarg($vbscript));
+
+			// Remove temporary file.
+			unlink($vbscript);
+		}
+		else
+		{
+			$password = shell_exec('/usr/bin/env bash -c \'read -s -p "'.escapeshellcmd($text).'" var && echo $var\'');
+		}
+
+		Minion_CLI::write();
+
+		return trim($password);
+	}
+
+	/**
+	 * Outputs a string to the cli. If you send an array it will implode them
+	 * with a line break.
+	 *
+	 * @param string|array $text the text to output, or array of lines
 	 */
 	public static function write($text = '')
 	{
 		if (is_array($text))
 		{
-			$text = implode(PHP_EOL, $text);
+			foreach ($text as $line)
+			{
+				Minion_CLI::write($line);
+			}
 		}
-
-		fwrite(STDOUT, $text);
+		else
+		{
+			fwrite(STDOUT, $text.PHP_EOL);
+		}
 	}
 
 	/**
-	 * Outputs a replacable line to the CLI. You can continue replacing the
+	 * Outputs a replacable line to the cli. You can continue replacing the
 	 * line until `TRUE` is passed as the second parameter in order to indicate
 	 * you are done modifying the line.
 	 *
@@ -189,34 +226,28 @@ abstract class Kohana_Minion_CLI {
 	 *     // Done writing this line
 	 *     Minion_CLI::write_replace('100%', TRUE);
 	 *
-	 * @param  string  $text     the text to output
-	 * @param  boolean $end_line whether the line is done being replaced
-	 * @return void
+	 * @param string  $text      the text to output
+	 * @param boolean $end_line  whether the line is done being replaced
 	 */
 	public static function write_replace($text = '', $end_line = FALSE)
 	{
 		// Append a newline if $end_line is TRUE
-		if ($end_line === TRUE)
-		{
-			$text .= PHP_EOL;
-		}
+		$text = $end_line ? $text.PHP_EOL : $text;
 		fwrite(STDOUT, "\r\033[K".$text);
 	}
 
 	/**
-	 * Waits a certain number of seconds, optionally showing a wait message
-	 * and waiting for a key press.
+	 * Waits a certain number of seconds, optionally showing a wait message and
+	 * waiting for a key press.
 	 *
-	 * @author    Fuel Development Team
-	 * @license   MIT License
-	 * @copyright 2010 - 2011 Fuel Development Team
-	 * @link      http://fuelphp.com
-	 * 
-	 * @param  integer $seconds   number of seconds
-	 * @param  boolean $countdown show a countdown or not
-	 * @return void
+	 * @author     Fuel Development Team
+	 * @license    MIT License
+	 * @copyright  2010 - 2011 Fuel Development Team
+	 * @link       http://fuelphp.com
+	 * @param int $seconds number of seconds
+	 * @param bool $countdown show a countdown or not
 	 */
-	public static function wait($seconds = 0, $countdown = FALSE)
+	public static function wait($seconds = 0, $countdown = false)
 	{
 		if ($countdown === TRUE)
 		{
@@ -226,7 +257,7 @@ abstract class Kohana_Minion_CLI {
 			{
 				fwrite(STDOUT, $time.'... ');
 				sleep(1);
-				$time--;
+				--$time;
 			}
 
 			Minion_CLI::write();
@@ -239,55 +270,41 @@ abstract class Kohana_Minion_CLI {
 			}
 			else
 			{
-				Minion_CLI::write(I18n::translate('Press any key to continue...'));
+				Minion_CLI::write(Minion_CLI::$wait_msg);
 				Minion_CLI::read();
 			}
 		}
 	}
 
 	/**
-	 * Returns the given text with the correct color codes for a foreground 
-	 * and optionally a background color.
+	 * Returns the given text with the correct color codes for a foreground and
+	 * optionally a background color.
 	 *
-	 * @author    Fuel Development Team
-	 * @license   MIT License
-	 * @copyright 2010 - 2011 Fuel Development Team
-	 * @link      http://fuelphp.com
-	 * 
-	 * @param  string $text the text to color
-	 * @param  string $foreground the foreground color, uses [Minion_CLI::$_foreground_colors]
-	 * @param  string $background the background color, uses [Minion_CLI::$_background_colors]
+	 * @author     Fuel Development Team
+	 * @license    MIT License
+	 * @copyright  2010 - 2011 Fuel Development Team
+	 * @link       http://fuelphp.com
+	 * @param string $text the text to color
+	 * @param string $foreground the foreground color
+	 * @param string $background the background color
 	 * @return string the color coded string
-	 * @throws Minion_Exception
-	 * @uses   Kohana::$is_windows
 	 */
-	public static function color($text, $foreground, $background = NULL)
+	public static function color($text, $foreground, $background = null)
 	{
 		if (Kohana::$is_windows)
-		{
 			return $text;
-		}
 
-		if ( ! isset(Minion_CLI::$_foreground_colors[$foreground]))
-		{
-			throw new Minion_Exception(
-				'Invalid CLI foreground color `:color`', 
-				array(':color' => $foreground)
-			);
-		}
-		elseif ( ! empty($background) AND ! isset(Minion_CLI::$_background_colors[$background]))
-		{
-			throw new Minion_Exception(
-				'Invalid CLI background color `:color`', 
-				array(':color' => $background)
-			);
-		}
+		if ( ! array_key_exists($foreground, Minion_CLI::$foreground_colors))
+			throw new Kohana_Exception('Invalid CLI foreground color: '.$foreground);
 
-		$string = "\033[".Minion_CLI::$_foreground_colors[$foreground]."m";
+		if ($background !== NULL AND ! array_key_exists($background, Minion_CLI::$background_colors))
+			throw new Kohana_Exception('Invalid CLI background color: '.$background);
 
-		if ( ! empty($background))
+		$string = "\033[".Minion_CLI::$foreground_colors[$foreground]."m";
+
+		if ($background !== NULL)
 		{
-			$string .= "\033[".Minion_CLI::$_background_colors[$background]."m";
+			$string .= "\033[".Minion_CLI::$background_colors[$background]."m";
 		}
 
 		$string .= $text."\033[0m";
